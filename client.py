@@ -5,32 +5,38 @@ from time import sleep
 
 class Node:
 
-    def __init__(self, node_id: int) -> None:
+    def __init__(self, node_id: int, f: int=1) -> None:
 
         self.client = kazoo.client.KazooClient("localhost:2181,localhost:2182,localhost:2183")
         self.client.start()
         # get f
-        f = self.client.get("root")[0]
-        self.n_replicas = int(f)
-        self.znodes = list(self.client.get_children("root", watch=self.update_znode_list))
+        if not self.client.exists("root"):
+            self.client.create("root", value=bytes(f"{f}", "utf-8"))
+        else:
+            f = self.client.get("root")[0]
+            f = f.decode("utf-8")
+            f = int(f)
+        self.n_replicas = f
         self.path = f"root/{node_id}"
+        self.znodes = [node for node in self.client.get_children("root") if node != f"{node_id}"]
         self.client.ensure_path(self.path)
         self.client.get(self.path, watch=self.react_to_change)
         self.tuples = set()
         self.replicas = dict()
-    
 
         self.waiting_for_search = ()
         self.search_result = ()
         self.id = node_id
         # inizialize replica mapper
-        for node in self.znodes:
+        self.replicas = dict()
 
-            self.replicas[node] = set()
+    def get_tuples(self) -> set:
+
+        return self.tuples
 
     def update_znode_list(self, *args) -> None:
 
-        self.znodes = list(self.client.get_children("root"))
+        self.znodes = [node for node in self.client.get_children("root") if node != self.path[5:]]
 
     def remove(self, t: tuple):
 
@@ -49,17 +55,13 @@ class Node:
             else:
                 self.replicas[t].add(node)
 
-    def look_for_tuple(self, t: list) -> tuple:
+    def __search(self, fields):
 
-        path, t = t
         selected = None
-        fields = eval(t)
-        print(f"looking for {t} in {self.tuples}")
         for local_t in self.tuples:
 
             valid = True
             for field, value in enumerate(fields):
-
 
                 if value == "*":
                     continue
@@ -70,6 +72,17 @@ class Node:
 
             if valid:
                 selected = local_t
+                break
+
+        return selected
+
+    def look_for_tuple(self, t: list) -> tuple:
+
+        path, t = t
+        selected = None
+        fields = eval(t)
+        print(f"looking for {t} in {self.tuples}")
+        selected = self.__search(fields)
 
         if selected is not None:
             value = bytes(f"found:{selected}", "utf-8") 
@@ -97,34 +110,42 @@ class Node:
             self.replicate(replicas, t)
         elif request == "get":
             selected = self.look_for_tuple(t)
+            if selected is None:
+                self.client.get(self.path, watch=self.react_to_change)
+                return
             for node in self.replicas[selected]:
 
                 value = bytes(f"remove:{selected}", "utf-8")
                 self.client.set(f"root/{node}", value=value)
 
             self.remove(selected)
-        elif "read":
+        elif request == "read":
             selected = self.look_for_tuple(t)
-        elif "found":
+        elif request == "found":
             if not self.waiting_for_search:
                 return
             t = eval(t[0])
             self.waiting_for_search = set()
             self.search_result = t
-        elif "not_found":
+        elif request == "not_found":
             node = args[0].path.split("/")
             node = node[1]
             self.waiting_for_search.remove(node)
-        elif "remove":
+        elif request == "remove":
             t = eval(t[0])
             self.remove(t)
+
+        self.client.get(self.path, watch=self.react_to_change)
 
     def get(self, t: str) -> tuple:
 
         self.search_result = ()
 
-        while (self.search_result) == 0:
+        local_result = self.__search(t)
+        if local_result is not None:
+            return local_result
 
+        while len(self.search_result) == 0:
             self.waiting_for_search = set(self.znodes)
             for node in self.znodes:
 
@@ -140,7 +161,9 @@ class Node:
         self.waiting_for_search = set(self.znodes)
         self.search_result = ()
 
-        print(self.znodes)
+        local_result = self.__search(t)
+        if local_result is not None:
+            return local_result
         
         for node in self.znodes:
 
@@ -156,6 +179,9 @@ class Node:
     def write(self, t: str) -> None:
         # every replica multicasts in caise there's a fault mid loop
         self.tuples.add(t)
-        replicas = sample(self.znodes, self.n_replicas)
+        me = self.path[5:]
+        znodes = [node for node in self.znodes if node != me]
+        replicas = sample(znodes, min(len(znodes), self.n_replicas))
+        print(replicas)
         self.replicate(replicas, t)
 
