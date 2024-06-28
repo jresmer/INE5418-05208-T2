@@ -1,7 +1,6 @@
 
 from client import Node
 from time import sleep
-import keyboard
 
 
 class Client:
@@ -89,8 +88,6 @@ class LibraryManager:
         return t
 
 if __name__ == "__main__":
-    
-    
 
     # lib_manager.add_client('c1', "Tiago", 21)
     # lib_manager.add_book('b1', "Dune", "Frank Herbert", "1965", "Chilton Books")

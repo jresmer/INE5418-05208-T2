@@ -1,6 +1,6 @@
 import kazoo.client
 from random import sample
-from time import sleep
+from time import sleep, time
 
 
 class Node:
@@ -81,23 +81,19 @@ class Node:
         path, t = t
         selected = None
         fields = eval(t)
-        print(f"looking for {t} in {self.tuples}")
         selected = self.__search(fields)
 
         if selected is not None:
             value = bytes(f"found:{selected}", "utf-8") 
             self.client.set(path, value=value)
-            print(f"answer: {value}")
         else:
             value = bytes(f"not found", "utf-8") 
             self.client.set(path, value=value)
-            print(f"answer: {value}")
 
         return selected
 
     def react_to_change(self, *args) -> None:
 
-        
         value = self.client.get(self.path)[0]
         value = value.decode("utf-8")
         request, *t = value.split(":")
@@ -106,6 +102,7 @@ class Node:
         if request == "write":
             replicas, t = t
             replicas = eval(replicas)
+            t = eval(t)
             self.tuples.add(t)
             self.replicate(replicas, t)
         elif request == "get":
@@ -165,16 +162,18 @@ class Node:
         if local_result is not None:
             return local_result
         
+        start = time()
         for node in self.znodes:
 
             value = bytes(f"read:{self.path}:{t}", "utf-8")
             self.client.set(f"root/{node}", value=value)
 
         while len(self.waiting_for_search) > 1:
-            pass
+            
+            if time() - start >= 1:
+                break
         
         return self.search_result
-
 
     def write(self, t: str) -> None:
         # every replica multicasts in caise there's a fault mid loop
@@ -184,4 +183,3 @@ class Node:
         replicas = sample(znodes, min(len(znodes), self.n_replicas))
         print(replicas)
         self.replicate(replicas, t)
-
