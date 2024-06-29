@@ -5,38 +5,39 @@ from time import sleep, time
 
 class Node:
 
-    def __init__(self, node_id: int, f: int=1) -> None:
-
-        self.client = kazoo.client.KazooClient("localhost:2181,localhost:2182,localhost:2183")
+    def __init__(self, node_id: int, f: int=1, server_ip: str="localhost") -> None:
+        # initializing zookeeper client
+        self.client = kazoo.client.KazooClient(f"{server_ip}:2181,{server_ip}:2182,{server_ip}:2183")
         self.client.start()
-        # get f
+        # ensuring the existence of the root znode and recovering the f value
         if not self.client.exists("root"):
             self.client.create("root", value=bytes(f"{f}", "utf-8"))
         else:
             f = self.client.get("root")[0]
             f = f.decode("utf-8")
             f = int(f)
+        # ensuring the existence of the znode corresponding to the node id
         self.n_replicas = f
+        self.id = node_id
         self.path = f"root/{node_id}"
-        self.znodes = [node for node in self.client.get_children("root") if node != f"{node_id}"]
+        self.znodes = [node for node in self.client.get_children("root", watch=self.update_znode_list) if node != f"{node_id}"]
         self.client.ensure_path(self.path)
         self.client.get(self.path, watch=self.react_to_change)
+        # initializing local tuple set
         self.tuples = set()
-        self.replicas = dict()
-
-        self.waiting_for_search = ()
-        self.search_result = ()
-        self.id = node_id
         # inizialize replica mapper
         self.replicas = dict()
-
+        # initializting search control variables
+        self.waiting_for_search = ()
+        self.search_result = ()
+    
     def get_tuples(self) -> set:
 
         return self.tuples
 
     def update_znode_list(self, *args) -> None:
 
-        self.znodes = [node for node in self.client.get_children("root") if node != self.path[5:]]
+        self.znodes = [node for node in self.client.get_children("root", watch=self.update_znode_list) if node != self.path[5:]]
 
     def remove(self, t: tuple):
 
@@ -45,7 +46,7 @@ class Node:
         del self.replicas[t]
 
     def replicate(self, replicas: list, t: str) -> None:
-
+        # sends a write request to all the replicas
         for node in replicas:
 
             value = bytes(f"write:{replicas}:{t}", "utf-8")
@@ -56,7 +57,7 @@ class Node:
                 self.replicas[t].add(node)
 
     def __search(self, fields):
-
+        # searches locally for a tuple
         selected = None
         for local_t in self.tuples:
 
@@ -77,7 +78,7 @@ class Node:
         return selected
 
     def look_for_tuple(self, t: list) -> tuple:
-
+        # controls local search
         path, t = t
         selected = None
         fields = eval(t)
@@ -93,7 +94,8 @@ class Node:
         return selected
 
     def react_to_change(self, *args) -> None:
-
+        # general callback/watcher function
+        # reacts to changes to the nodes' corresponding znode
         value = self.client.get(self.path)[0]
         value = value.decode("utf-8")
         request, *t = value.split(":")
@@ -171,11 +173,17 @@ class Node:
         while len(self.waiting_for_search) > 1:
             
             if time() - start >= 1:
+                # delete inactive nodes from the vision
+                for node in self.waiting_for_search:
+                    self.client.delete(f"root/{node}")
                 break
         
         return self.search_result
 
     def write(self, t: str) -> None:
+        # if tuple already exits in space aborts operation
+        if self.read(t):
+            return 
         # every replica multicasts in caise there's a fault mid loop
         self.tuples.add(t)
         me = self.path[5:]
