@@ -31,15 +31,15 @@ class Loan:
 
 class LibraryManager:
     def __init__(self):
-        # self.book_node = Node(1)
+        self.book_node = Node(1)
         self.clients: dict[str, Client] = {}
         self.loans: dict[tuple, Loan] = {}
     
-    def search_client(self, ID: str) -> Client:
+    def search_client(self, ID: str) -> tuple:
         try:
             return self.clients[ID].get_info()
         except KeyError:
-            print("ERROR: Client not found")
+            return ()
 
     def add_client(self, ID: str, name: str, age: int):
         if ID not in self.clients:
@@ -49,14 +49,28 @@ class LibraryManager:
 
     def remove_client(self, ID):
         try:
+            client = self.clients[ID]
+            for loan in self.loans:
+                if loan.client.id == ID:
+                    print("ERROR: Client has pending loans")
+                    return
             del self.clients[ID]
         except KeyError:
             print("ERROR: Client not found")
 
     def loan_book(self, client_id: str, book_info: tuple):
+        try:
+            client = self.clients[client_id]
+        except KeyError:
+            print("ERROR: Client not found")
+            return
+            
         t = self.book_node.get(book_info)
+        if t == ():
+            print("ERROR: Book not found")
+            return
         book = Book(*t)
-        client = self.clients[client_id]
+
         self.loans[(client.ID, book.ID)] = Loan(book, client)
 
     def return_book(self, client_id: str, book_id: str):
@@ -76,12 +90,13 @@ class LibraryManager:
             print("ERROR: Couldn't delete loan")
     
     def add_book(self, ID: str, title: str, author: str, year: str, publisher: str):
+        # print(f"Creating book {ID, title, author, year, publisher}")
         book = Book(ID, title, author, year, publisher)
         t = book.get_info()
-        print(t)
-        self.book_node.write(t)
+        # print(t)
+        # self.book_node.write(t)
 
-    def search_book(self, ID: str, title: str, author: str, year: str, publisher:str):
+    def search_book(self, ID: str, title: str, author: str, year: str, publisher:str) -> tuple:
         book = Book(ID, title, author, year, publisher)
         t = book.get_info()
         t = self.book_node.read(t)
@@ -115,10 +130,11 @@ if __name__ == "__main__":
     run = True
     while run:
         request = input()
-        items = [x.split(" ") for x in request.split(" -")]
+        items = [x.split(" ", 1) for x in request.split(" -")]
         # print(items)
         cmd = items[0][0]
         args = {item[0]: item[1] for item in items[1:]}
+        # print(cmd)
         # print(args)
 
         if cmd == "addbk":
@@ -127,19 +143,26 @@ if __name__ == "__main__":
             author = args.get('a', '_')
             year = args.get('y', '_')
             publisher = args.get('p', '_')
-
-            lib_manager.add_book(id, title, author, year, publisher)
+            if '_' in {id, title, author, year, publisher}:
+                print("ERROR: Must give full info of book")
+            else:
+                lib_manager.add_book(id, title, author, year, publisher)
         elif cmd == "addcli":
             id = args.get('i', '_')
             name = args.get('n', '_')
             age = args.get('a', '_')
-            
-            lib_manager.add_client(id, name, age)
+            if '_' in {id, name, age}:
+                print("ERROR: Must give full info of client")
+            else:
+                lib_manager.add_client(id, name, age)
         elif cmd == "getcli":
             id = args.get('i', '_')
             t = lib_manager.search_client(id)
-            info = " ".join(t)
-            print(f"Client: {info}")
+            if t == ():
+                print("ERROR: Client not found")
+            else:
+                info = " ".join(t)
+                print(f"Client: {info}")
         elif cmd == "getbk":
             id = args.get('i', '_')
             title = args.get('t', '_')
@@ -148,8 +171,11 @@ if __name__ == "__main__":
             publisher = args.get('p', '_')
 
             t = lib_manager.search_book(id, title, author, year, publisher)
-            info = " ".join(t)
-            print(f"Book: {info}")
+            if t == ():
+                print("ERROR: Book not found")
+            else:
+                info = " ".join(t)
+                print(f"Book: {info}")
         elif cmd == "rmvcli":
             id = args.get('i', '_')
 
@@ -161,13 +187,26 @@ if __name__ == "__main__":
             author = args.get('a', '_')
             year = args.get('y', '_')
             publisher = args.get('p', '_')
-
-            lib_manager.loan_book(client_id, book_id, title, author, year, publisher)
+            if client_id == '_':
+                print("ERROR: Must give valid client id")
+            else:
+                lib_manager.loan_book(client_id, book_id, title, author, year, publisher)
         elif cmd == "rmloan":
             client_id = args.get('c', '_')
             book_id = args.get('b', '_')
-            
+            if client_id == '_':
+                print("ERROR: Must give valid client id")
+            if book_id == '_':
+                print("ERROR: Must give valid book id")
             lib_manager.return_book(client_id, book_id)
         elif cmd == "quit":
             run = False
             print("Goodbye")
+        elif cmd == "help":
+            print("     addbk -i id -t title -a author -y year -p publisher                     # ADD BOOK")
+            print("     getbk -i id -t title -a author -y year -p publisher                     # GET BOOK INFO\n")
+            print("     addcli -i id -n name -a age                                             # ADD CLIENT")
+            print("     getcli -i id                                                            # GET CLIENT INFO BY ID")
+            print("     rmvcli -i id                                                            # REMOVE CLIENT BY ID\n")
+            print("     mkloan -c clientID -b bookid -t title -a author -y year -p publisher    # MAKE LOAN")
+            print("     rmloan -c clientID -b bookid                                            #REMOVE LOAN")
