@@ -88,7 +88,7 @@ class Node:
             value = bytes(f"found:{selected}", "utf-8") 
             self.client.set(path, value=value)
         else:
-            value = bytes(f"not found", "utf-8") 
+            value = bytes(f"not found:{self.path}", "utf-8") 
             self.client.set(path, value=value)
 
         return selected
@@ -99,7 +99,7 @@ class Node:
         value = self.client.get(self.path)[0]
         value = value.decode("utf-8")
         request, *t = value.split(":")
-        print(f"{self.id} reacting to {request} request ")
+        print(f"{self.id} reacting to {request} type request")
 
         if request == "write":
             replicas, t = t
@@ -126,9 +126,9 @@ class Node:
             t = eval(t[0])
             self.waiting_for_search = set()
             self.search_result = t
-        elif request == "not_found":
-            node = args[0].path.split("/")
-            node = node[1]
+        elif request == "not found":
+            path = t[0]
+            node = path[5:]
             self.waiting_for_search.remove(node)
         elif request == "remove":
             t = eval(t[0])
@@ -169,25 +169,33 @@ class Node:
 
             value = bytes(f"read:{self.path}:{t}", "utf-8")
             self.client.set(f"root/{node}", value=value)
-
+        
+        sleep(0.2)
         while len(self.waiting_for_search) > 1:
-            
-            if time() - start >= 1:
+
+            if time() - start >= 2:
                 # delete inactive nodes from the vision
-                for node in self.waiting_for_search:
-                    self.client.delete(f"root/{node}")
+                # for node in self.waiting_for_search:
+                #     path = f"root/{node}"
+                #     if path == self.path:
+                #         continue
+                #     print(f"deleting: {path}")
+                #     self.client.delete(path)
                 break
         
         return self.search_result
 
     def write(self, t: str) -> None:
         # if tuple already exits in space aborts operation
-        if self.read(t):
-            return 
+        print(f"node {self.id} writing {t}")
+        response = self.read(t)
+        if len(response) != 0:
+            print(f"found {response}")
+            return
         # every replica multicasts in caise there's a fault mid loop
         self.tuples.add(t)
         me = self.path[5:]
         znodes = [node for node in self.znodes if node != me]
         replicas = sample(znodes, min(len(znodes), self.n_replicas))
-        print(replicas)
+        print(f"replicas: {replicas}")
         self.replicate(replicas, t)
