@@ -19,7 +19,7 @@ class Node:
         # ensuring the existence of the znode corresponding to the node id
         self.znodes = [node for node in self.client.get_children("root", watch=self.update_znode_list) if node != f"{node_id}"]
         if node_id is None:
-            max_id = max(self.znodes)
+            max_id = max(self.znodes + ['0'])
             node_id = int(max_id) + 1
         self.n_replicas = f
         self.id = node_id
@@ -46,6 +46,10 @@ class Node:
 
         # removes tuple from space
         self.tuples.remove(t)
+        for node in self.replicas[t]:
+
+            value = bytes(f"remove:{t}", "utf-8")
+            self.client.set(f"root/{node}", value=value)
         del self.replicas[t]
 
     def replicate(self, replicas: list, t: str) -> None:
@@ -110,6 +114,7 @@ class Node:
             replicas.remove(self.path[5:])
             t = eval(t)
             if t in self.tuples:
+                self.client.get(self.path, watch=self.react_to_change)
                 return
             self.tuples.add(t)
             self.replicate(replicas, t)
@@ -118,16 +123,13 @@ class Node:
             if selected is None:
                 self.client.get(self.path, watch=self.react_to_change)
                 return
-            for node in self.replicas[selected]:
-
-                value = bytes(f"remove:{selected}", "utf-8")
-                self.client.set(f"root/{node}", value=value)
 
             self.remove(selected)
         elif request == "read":
             selected = self.look_for_tuple(t)
         elif request == "found":
             if not self.waiting_for_search:
+                self.client.get(self.path, watch=self.react_to_change)
                 return
             t = eval(t[0])
             self.waiting_for_search = set()
@@ -138,19 +140,23 @@ class Node:
             self.waiting_for_search.remove(node)
         elif request == "remove":
             t = eval(t[0])
-            self.remove(t)
+            if t in self.tuples:
+                self.remove(t)
 
         self.client.get(self.path, watch=self.react_to_change)
 
     def get(self, t: str) -> tuple:
 
         self.search_result = ()
-
-        local_result = self.__search(t)
-        if local_result is not None:
-            return local_result
-
+        # waits for
         while len(self.search_result) == 0:
+
+            # does local search first
+            local_result = self.__search(t)
+            if local_result is not None:
+                self.remove(local_result)
+                return local_result
+            # searchs in other nodes
             self.waiting_for_search = set(self.znodes)
             for node in self.znodes:
 
@@ -167,6 +173,8 @@ class Node:
         self.search_result = ()
 
         local_result = self.__search(t)
+        print(t)
+        print(self.tuples)
         if local_result is not None:
             return local_result
         
@@ -193,15 +201,14 @@ class Node:
 
     def write(self, t: str) -> None:
         # if tuple already exits in space aborts operation
-        print(f"node {self.id} writing {t}")
         response = self.read(t)
         if len(response) != 0:
-            print(f"found {response}")
+            print("already there")
             return
         # every replica multicasts in caise there's a fault mid loop
         self.tuples.add(t)
         me = self.path[5:]
         znodes = [node for node in self.znodes if node != me]
         replicas = sample(znodes, min(len(znodes), self.n_replicas))
-        print(f"replicas: {replicas}")
+        print(f"replicas={replicas}")
         self.replicate(replicas, t)
