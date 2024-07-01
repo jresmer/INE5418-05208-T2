@@ -47,9 +47,9 @@ class Node:
 
     def replicate(self, replicas: list, t: str) -> None:
         # sends a write request to all the replicas
+        value = bytes(f"write:{replicas + [self.path[5:]]}:{t}", "utf-8")
         for node in replicas:
 
-            value = bytes(f"write:{replicas}:{t}", "utf-8")
             self.client.set(f"root/{node}", value=value)
             if t not in self.replicas.keys():
                 self.replicas[t] = {node}
@@ -104,6 +104,7 @@ class Node:
         if request == "write":
             replicas, t = t
             replicas = eval(replicas)
+            replicas.remove(self.path[5:])
             t = eval(t)
             self.tuples.add(t)
             self.replicate(replicas, t)
