@@ -31,7 +31,7 @@ class Loan:
 
 class LibraryManager:
     def __init__(self):
-        self.book_node = Node(1)
+        self.book_node = Node()
         self.clients: dict[str, Client] = {}
         self.loans: dict[tuple, Loan] = {}
     

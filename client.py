@@ -5,7 +5,7 @@ from time import sleep, time
 
 class Node:
 
-    def __init__(self, node_id: int, f: int=1, server_ip: str="localhost") -> None:
+    def __init__(self, node_id: int=None, f: int=1, server_ip: str="localhost") -> None:
         # initializing zookeeper client
         self.client = kazoo.client.KazooClient(f"{server_ip}:2181,{server_ip}:2182,{server_ip}:2183")
         self.client.start()
@@ -17,10 +17,13 @@ class Node:
             f = f.decode("utf-8")
             f = int(f)
         # ensuring the existence of the znode corresponding to the node id
+        self.znodes = [node for node in self.client.get_children("root", watch=self.update_znode_list) if node != f"{node_id}"]
+        if node_id is None:
+            max_id = max(self.znodes)
+            node_id = int(max_id) + 1
         self.n_replicas = f
         self.id = node_id
         self.path = f"root/{node_id}"
-        self.znodes = [node for node in self.client.get_children("root", watch=self.update_znode_list) if node != f"{node_id}"]
         self.client.ensure_path(self.path)
         self.client.get(self.path, watch=self.react_to_change)
         # initializing local tuple set
