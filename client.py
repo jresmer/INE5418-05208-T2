@@ -109,6 +109,8 @@ class Node:
             replicas = eval(replicas)
             replicas.remove(self.path[5:])
             t = eval(t)
+            if t in self.tuples:
+                return
             self.tuples.add(t)
             self.replicate(replicas, t)
         elif request == "get":
