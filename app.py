@@ -190,7 +190,7 @@ if __name__ == "__main__":
             if client_id == '_':
                 print("ERROR: Must give valid client id")
             else:
-                lib_manager.loan_book(client_id, book_id, title, author, year, publisher)
+                lib_manager.loan_book(client_id, (book_id, title, author, year, publisher))
         elif cmd == "rmloan":
             client_id = args.get('c', '_')
             book_id = args.get('b', '_')
@@ -210,3 +210,5 @@ if __name__ == "__main__":
             print("     rmvcli -i id                                                            # REMOVE CLIENT BY ID\n")
             print("     mkloan -c clientID -b bookid -t title -a author -y year -p publisher    # MAKE LOAN")
             print("     rmloan -c clientID -b bookid                                            #REMOVE LOAN")
+        else:
+            print(f"Command not found. Type 'help' for see options")
