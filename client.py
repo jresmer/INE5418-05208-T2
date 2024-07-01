@@ -64,7 +64,7 @@ class Node:
             valid = True
             for field, value in enumerate(fields):
 
-                if value == "*":
+                if value in {"*", "_"} :
                     continue
 
                 if value != local_t[field]:

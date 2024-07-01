@@ -94,7 +94,7 @@ class LibraryManager:
         book = Book(ID, title, author, year, publisher)
         t = book.get_info()
         # print(t)
-        # self.book_node.write(t)
+        self.book_node.write(t)
 
     def search_book(self, ID: str, title: str, author: str, year: str, publisher:str) -> tuple:
         book = Book(ID, title, author, year, publisher)
