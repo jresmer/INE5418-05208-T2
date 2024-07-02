@@ -1,6 +1,7 @@
 import kazoo.client
 from random import sample
 from time import sleep, time
+from asyncio import Lock
 
 
 class Node:
@@ -33,6 +34,7 @@ class Node:
         # initializting search control variables
         self.waiting_for_search = ()
         self.search_result = ()
+        self.lock = Lock()
     
     def get_tuples(self) -> set:
 
@@ -100,7 +102,10 @@ class Node:
 
         return selected
 
-    def react_to_change(self, *args) -> None:
+
+    async def react_to_change(self, *args) -> None:
+        # to provent other threads to react concorrently
+        await self.lock.acquire()
         # general callback/watcher function
         # reacts to changes to the nodes' corresponding znode
         value = self.client.get(self.path)[0]
@@ -115,6 +120,7 @@ class Node:
             t = eval(t)
             if t in self.tuples:
                 self.client.get(self.path, watch=self.react_to_change)
+                self.lock.release()
                 return
             self.tuples.add(t)
             self.replicate(replicas, t)
@@ -122,6 +128,7 @@ class Node:
             selected = self.look_for_tuple(t)
             if selected is None:
                 self.client.get(self.path, watch=self.react_to_change)
+                self.lock.release()
                 return
 
             self.remove(selected)
@@ -130,6 +137,7 @@ class Node:
         elif request == "found":
             if not self.waiting_for_search:
                 self.client.get(self.path, watch=self.react_to_change)
+                self.lock.release()
                 return
             t = eval(t[0])
             self.waiting_for_search = set()
@@ -144,6 +152,7 @@ class Node:
                 self.remove(t)
 
         self.client.get(self.path, watch=self.react_to_change)
+        self.lock.release()
 
     def get(self, t: str) -> tuple:
 
