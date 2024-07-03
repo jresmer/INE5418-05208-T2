@@ -58,6 +58,7 @@ de modo que o último digito da port seja o mesmo da pasta (o cliente kazoo aces
 7 - incluir em cada uma dessas pastas um arquivo myid contendo apenas o id do servidor (1, 2, 3)
 8 - rodar o servidor como descrito previamente
 
+Será necessário intalar o kazoo no ambiente virtual: pip install kazoo
 Com o servidor em execução basta executar o código em python
 comando: python3 app.py
 Cada processo app irá criar seu próprio nodo
