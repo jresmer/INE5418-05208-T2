@@ -1,7 +1,7 @@
 import kazoo.client
 from random import sample
 from time import sleep, time
-from asyncio import Lock
+import threading
 
 
 class Node:
@@ -34,7 +34,7 @@ class Node:
         # initializting search control variables
         self.waiting_for_search = ()
         self.search_result = ()
-        self.lock = Lock()
+        self.lock = threading.Lock()
     
     def get_tuples(self) -> set:
 
@@ -103,9 +103,9 @@ class Node:
         return selected
 
 
-    async def react_to_change(self, *args) -> None:
+    def react_to_change(self, *args) -> None:
         # to provent other threads to react concorrently
-        await self.lock.acquire()
+        self.lock.acquire()
         # general callback/watcher function
         # reacts to changes to the nodes' corresponding znode
         value = self.client.get(self.path)[0]
@@ -182,8 +182,6 @@ class Node:
         self.search_result = ()
 
         local_result = self.__search(t)
-        print(t)
-        print(self.tuples)
         if local_result is not None:
             return local_result
         
